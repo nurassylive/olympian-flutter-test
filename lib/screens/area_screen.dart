@@ -1,8 +1,10 @@
 import 'dart:math';
+import 'package:lottie/lottie.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/word_model.dart';
 import '../utils/physics.dart';
 import '../viewmodels/game_viewmodel.dart';
 import '../widgets/base_scaffold.dart';
@@ -26,24 +28,22 @@ class AreaScreen extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
             HelpButton(
-              helpText: vm.isLastWord()
-                  ? 'Открыть случайное слово. Нельзя открыть последнее слово'
-                  : 'Открыть случайное слово. Уберите курсор из ячейки',
+              helpText: vm.isLastWord() ? 'Открыть случайное слово. Нельзя открыть последнее слово' : 'Открыть случайное слово. Уберите курсор из ячейки',
             ),
             HelpButton(
               word: true,
-              helpText: vm.isLastWord()
-                  ? 'Открыть выбранное слово. Нельзя открыть последнее слово'
-                  : 'Открыть выбранное слово. Выберете ячейку',
+              helpText: vm.isLastWord() ? 'Открыть выбранное слово. Нельзя открыть последнее слово' : 'Открыть выбранное слово. Выберете ячейку',
             ),
-            const SizedBox(height: 66,),
+            const SizedBox(
+              height: 66,
+            ),
           ],
         ),
         appBar: AppBar(
           automaticallyImplyLeading: false,
           elevation: 0,
           toolbarHeight: 76.0,
-          flexibleSpace: ScoreBar(
+          flexibleSpace: const ScoreBar(
             withPadding: true,
             showLevel: true,
             prevScreen: 'Level',
@@ -88,13 +88,18 @@ class __NestedScrollState extends State<_NestedScroll> {
 
   _ensureScroll(BuildContext ctx) async {
     await Future.delayed(const Duration(milliseconds: 500));
-    ctx.read<GameViewModel>().scrollToWidget();
+    if (mounted) ctx.read<GameViewModel>().scrollToWidget();
   }
 
   @override
   Widget build(BuildContext context) {
     final vm = context.watch<GameViewModel>();
     final groups = vm.groups;
+    late final WordModel firstWord;
+    int countWord = 0;
+
+    final double minContainerHeight = MediaQuery.of(context).size.height - 70;
+    const double bottomContainerPadding = 66;
 
     _ensureScroll(context);
     final advContainerWidth = MediaQuery.of(context).size.width - wordWidth;
@@ -120,29 +125,28 @@ class __NestedScrollState extends State<_NestedScroll> {
                     final page = (widthOffset / wordWidth).floor();
 
                     var itemCounts = vm.groups[page > 0 ? page : 0].length;
+
                     return Container(
                       height: (itemCounts + 1) * itemHeight,
-                      constraints: BoxConstraints(
-                        minHeight: MediaQuery.of(context).size.height - 70,
-                      ),
+                      constraints: BoxConstraints(minHeight: minContainerHeight),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           ...group.map((word) {
-                            final key =
-                                word == vm.scrollableWord ? dataKey : null;
+                            final key = word == vm.scrollableWord ? dataKey : null;
                             if (key != null) {
                               vm.scrollKey = key;
                             }
-                            final showEndLeaf =
-                                (widthOffset / wordWidth).floor() <= index;
-                            final showStartLeaf =
-                                (widthOffset / wordWidth).floor() == index;
+
+                            final showEndLeaf = (widthOffset / wordWidth).floor() <= index;
+                            final showStartLeaf = (widthOffset / wordWidth).floor() == index;
+                            countWord += 1;
+                            if (countWord == 1) firstWord = word;
+
                             return AnimatedBuilder(
                               animation: _scrollCtrl,
                               builder: (context, child) {
-                                final page =
-                                    max((widthOffset / wordWidth).floor(), 0);
+                                final page = max((widthOffset / wordWidth).floor(), 0);
                                 final position = _recalculateOffset(
                                   maxItems: groups[page].length,
                                   depth: word.depth,
@@ -168,9 +172,7 @@ class __NestedScrollState extends State<_NestedScroll> {
                               ),
                             );
                           }).toList(),
-                          Container(
-                            height: 66,
-                          ),
+                          const SizedBox(height: bottomContainerPadding),
                         ],
                       ),
                     );
@@ -181,6 +183,11 @@ class __NestedScrollState extends State<_NestedScroll> {
             ),
           ),
           Positioned(
+            top: (minContainerHeight / 2) - bottomContainerPadding - (itemHeight / 2),
+            left: wordWidth / 2 - 44,
+            child: _buildLottie(firstWord),
+          ),
+          Positioned(
             bottom: 0,
             left: 0,
             right: 0,
@@ -188,9 +195,10 @@ class __NestedScrollState extends State<_NestedScroll> {
               height: 40,
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Colors.transparent, Colors.black87]),
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.transparent, Colors.black87],
+                ),
               ),
             ),
           ),
@@ -200,11 +208,7 @@ class __NestedScrollState extends State<_NestedScroll> {
             right: 10,
             child: Center(
               child: AnimatedSmoothIndicator(
-                activeIndex: max(
-                    ((_scrollCtrl.hasClients ? _scrollCtrl.offset : 0) /
-                            wordWidth)
-                        .floor(),
-                    0),
+                activeIndex: max(((_scrollCtrl.hasClients ? _scrollCtrl.offset : 0) / wordWidth).floor(), 0),
                 count: groups.length,
                 effect: const ExpandingDotsEffect(
                   dotWidth: 12,
@@ -227,5 +231,22 @@ class __NestedScrollState extends State<_NestedScroll> {
     final offsetValue = max<double>((totalDepthHeight / depth) / 2, 0.0);
 
     return offsetValue;
+  }
+
+  Widget _buildLottie(WordModel firstWord) {
+    final levelId = context.read<GameViewModel>().getLevelIndex();
+    final isFirstLevelComplete = context.read<GameViewModel>().isFirstLevelComplete;
+    final skipLottie = levelId == 1 && !isFirstLevelComplete && firstWord.state != WordState.correct;
+    if (!skipLottie) return const SizedBox.shrink();
+
+    const String assetName = 'assets/lottie/word_item_animation.json';
+    return IgnorePointer(
+      ignoring: true,
+      child: Lottie.asset(
+        assetName,
+        width: 120,
+        alignment: Alignment.center,
+      ),
+    );
   }
 }
